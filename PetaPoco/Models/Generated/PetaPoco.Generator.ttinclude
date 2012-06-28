@@ -138,15 +138,15 @@ foreach(Table tbl in from t in tables where !t.Ignore select t)
 #>
     
 	[TableName("<#=tbl.Name#>")]
-<# if (tbl.PK!=null && tbl.PK.IsAutoIncrement) { #>
+<# if (tbl.PK!=null && (tbl.PK.Count > 1 ? false : (tbl.PK.Count == 1 ? tbl.PK[0].IsAutoIncrement : false))) { #>
 <# if (tbl.SequenceName==null) { #>
-	[PrimaryKey("<#=tbl.PK.Name#>")]
+	[PrimaryKey("<#=GetPrimaryKeys(tbl.PK)#>")]
 <# } else { #>
-	[PrimaryKey("<#=tbl.PK.Name#>", sequenceName="<#=tbl.SequenceName#>")]
+	[PrimaryKey("<#=GetPrimaryKeys(tbl.PK)#>", sequenceName="<#=tbl.SequenceName#>")]
 <# } #>
 <# } #>
-<# if (tbl.PK!=null && !tbl.PK.IsAutoIncrement) { #>
-	[PrimaryKey("<#=tbl.PK.Name#>", autoIncrement=false)]
+<# if (tbl.PK!=null && !(tbl.PK.Count > 1 ? false : (tbl.PK.Count == 1 ? tbl.PK[0].IsAutoIncrement : false))) { #>
+	[PrimaryKey("<#=GetPrimaryKeys(tbl.PK)#>", autoIncrement=false)]
 <# } #>
 	[ExplicitColumns]
     public partial class <#=tbl.ClassName#> <# if (GenerateOperations) { #>: <#=RepoName#>.Record<<#=tbl.ClassName#>> <# } #> 

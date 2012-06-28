@@ -1,4 +1,4 @@
-<#@ template language="C#v3.5" hostspecific="True" #>
+<#@ template language="C#" hostspecific="True" #>
 <#@ assembly name="EnvDTE" #>
 <#@ assembly name="System.Core.dll" #>
 <#@ assembly name="System.Data" #>
@@ -103,11 +103,11 @@ public class Table
 	public string SequenceName;
 	public bool Ignore;
 
-    public Column PK
+    public List<Column> PK
     {
         get
         {
-            return this.Columns.SingleOrDefault(x=>x.IsPK);
+			return this.Columns.Where(x => x.IsPK == true).ToList();
         }
     }
 
@@ -180,6 +180,15 @@ string CheckNullable(Column col)
 		)
         result="?";
     return result;
+}
+
+string GetPrimaryKeys(List<Column> cols)
+{
+	string result = "";
+	foreach (Column col in cols)
+		result += col.Name + ",";
+
+	return result.TrimEnd(',');
 }
 
 string GetConnectionString(ref string connectionStringName, out string providerName)
@@ -494,10 +503,10 @@ class SqlServerSchemaReader : SchemaReader
 		            
 			// Mark the primary key
 			string PrimaryKey=GetPK(tbl.Name);
-			var pkColumn=tbl.Columns.SingleOrDefault(x=>x.Name.ToLower().Trim()==PrimaryKey.ToLower().Trim());
-			if(pkColumn!=null)
+			var pkColumn = tbl.Columns.Where(x => PrimaryKey.ToLower().Split(',').Any(p => p.Trim() == x.Name.ToLower().Trim()));
+			foreach (Column col in pkColumn)
 			{
-				pkColumn.IsPK=true;
+				col.IsPK = true;
 			}
 		}
 	    
@@ -548,12 +557,17 @@ class SqlServerSchemaReader : SchemaReader
 
 	string GetPK(string table){
 		
-		string sql=@"SELECT c.name AS ColumnName
+		string sql=@"
+DECLARE @primaryKeys VARCHAR(500) = '';
+
+SELECT @primaryKeys = COALESCE(@primaryKeys + ',', '') + c.name
                 FROM sys.indexes AS i 
                 INNER JOIN sys.index_columns AS ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id 
                 INNER JOIN sys.objects AS o ON i.object_id = o.object_id 
                 LEFT OUTER JOIN sys.columns AS c ON ic.object_id = c.object_id AND c.column_id = ic.column_id
-                WHERE (i.is_primary_key = 1) AND (o.name = @tableName)";
+                WHERE (i.is_primary_key = 1) AND (o.name = @tableName);
+
+SELECT @primaryKeys;";
 
 		using (var cmd=_factory.CreateCommand())
 		{
@@ -568,7 +582,7 @@ class SqlServerSchemaReader : SchemaReader
 			var result=cmd.ExecuteScalar();
 
 			if(result!=null)
-				return result.ToString();    
+				return result.ToString().TrimStart(',');    
 		}	         
 		
 		return "";
@@ -692,11 +706,13 @@ class SqlServerCeSchemaReader : SchemaReader
 		{
 			tbl.Columns=LoadColumns(tbl);
 		            
-			// Mark the primary key
+			// Mark the primary keys
 			string PrimaryKey=GetPK(tbl.Name);
-			var pkColumn=tbl.Columns.SingleOrDefault(x=>x.Name.ToLower().Trim()==PrimaryKey.ToLower().Trim());
-			if(pkColumn!=null)
-				pkColumn.IsPK=true;
+			var pkColumn = tbl.Columns.Where(x => PrimaryKey.ToLower().Split(',').Any(p => p.Trim() == x.Name.ToLower().Trim()));
+			foreach (Column col in pkColumn)
+			{
+				col.IsPK = true;
+			}
 		}
 	    
 
@@ -741,12 +757,17 @@ class SqlServerCeSchemaReader : SchemaReader
 
 	string GetPK(string table){
 		
-		string sql=@"SELECT KCU.COLUMN_NAME 
+		string sql=@"
+DECLARE @primaryKeys VARCHAR(500) = '';
+
+SELECT @primaryKeys = COALESCE(@primaryKeys + ',', '') + KCU.COLUMN_NAME 
 			FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU
 			JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC
 			ON KCU.CONSTRAINT_NAME=TC.CONSTRAINT_NAME
 			WHERE TC.CONSTRAINT_TYPE='PRIMARY KEY'
-			AND KCU.TABLE_NAME=@tableName";
+			AND KCU.TABLE_NAME=@tableName;
+
+SELECT @primaryKeys;";
 
 		using (var cmd=_factory.CreateCommand())
 		{
@@ -761,7 +782,7 @@ class SqlServerCeSchemaReader : SchemaReader
 			var result=cmd.ExecuteScalar();
 
 			if(result!=null)
-				return result.ToString();    
+				return result.ToString().TrimStart(',');    
 		}	         
 		
 		return "";
@@ -878,11 +899,13 @@ class PostGreSqlSchemaReader : SchemaReader
 		{
 			tbl.Columns=LoadColumns(tbl);
 		            
-			// Mark the primary key
+			// Mark the primary keys
 			string PrimaryKey=GetPK(tbl.Name);
-			var pkColumn=tbl.Columns.SingleOrDefault(x=>x.Name.ToLower().Trim()==PrimaryKey.ToLower().Trim());
-			if(pkColumn!=null)
-				pkColumn.IsPK=true;
+			var pkColumn = tbl.Columns.Where(x => PrimaryKey.ToLower().Split(',').Any(p => p.Trim() == x.Name.ToLower().Trim()));
+			foreach (Column col in pkColumn)
+			{
+				col.IsPK = true;
+			}
 		}
 	    
 
@@ -927,12 +950,17 @@ class PostGreSqlSchemaReader : SchemaReader
 
 	string GetPK(string table){
 		
-		string sql=@"SELECT kcu.column_name 
+		string sql=@"
+DECLARE @primaryKeys VARCHAR(500) = '';
+
+SELECT @primaryKeys = COALESCE(@primaryKeys + ',', '') + kcu.column_name 
 			FROM information_schema.key_column_usage kcu
 			JOIN information_schema.table_constraints tc
 			ON kcu.constraint_name=tc.constraint_name
 			WHERE lower(tc.constraint_type)='primary key'
-			AND kcu.table_name=@tablename";
+			AND kcu.table_name=@tableName;
+
+SELECT @primaryKeys;";
 
 		using (var cmd=_factory.CreateCommand())
 		{
@@ -947,7 +975,7 @@ class PostGreSqlSchemaReader : SchemaReader
 			var result=cmd.ExecuteScalar();
 
 			if(result!=null)
-				return result.ToString();    
+				return result.ToString().TrimStart(',');    
 		}	         
 		
 		return "";
@@ -1175,11 +1203,13 @@ class OracleSchemaReader : SchemaReader
 		{
 			tbl.Columns=LoadColumns(tbl);
 		            
-			// Mark the primary key
+			// Mark the primary keys
 			string PrimaryKey=GetPK(tbl.Name);
-			var pkColumn=tbl.Columns.SingleOrDefault(x=>x.Name.ToLower().Trim()==PrimaryKey.ToLower().Trim());
-			if(pkColumn!=null)
-				pkColumn.IsPK=true;
+			var pkColumn = tbl.Columns.Where(x => PrimaryKey.ToLower().Split(',').Any(p => p.Trim() == x.Name.ToLower().Trim()));
+			foreach (Column col in pkColumn)
+			{
+				col.IsPK = true;
+			}
 		}
 	    
 
@@ -1225,11 +1255,16 @@ class OracleSchemaReader : SchemaReader
 
 	string GetPK(string table){
 		
-		string sql=@"select column_name from USER_CONSTRAINTS uc
+		string sql=@"
+DECLARE @primaryKeys VARCHAR(500) = '';
+
+select  @primaryKeys = COALESCE(@primaryKeys + ',', '') + column_name from USER_CONSTRAINTS uc
   inner join USER_CONS_COLUMNS ucc on uc.constraint_name = ucc.constraint_name
 where uc.constraint_type = 'P'
 and uc.table_name = upper(:tableName)
-and ucc.position = 1";
+and ucc.position = 1
+
+SELECT @primaryKeys;";
 
 		using (var cmd=_factory.CreateCommand())
 		{
@@ -1245,7 +1280,7 @@ and ucc.position = 1";
 			var result=cmd.ExecuteScalar();
 
 			if(result!=null)
-				return result.ToString();    
+				return result.ToString().TrimStart(',');    
 		}	         
 		
 		return "";
